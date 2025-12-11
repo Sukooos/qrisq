@@ -35,64 +35,101 @@ def run_quantum_simulation(variables: ExtractedVariables) -> Dict[str, Any]:
 
 def _run_qiskit_simulation(variables: ExtractedVariables) -> Dict[str, Any]:
     """
-    Real Qiskit quantum simulation.
+    Real Qiskit quantum simulation - ENHANCED VERSION.
     
     Circuit Design:
-    - 4 qubits representing: Modal Risk, Sector Risk, Location Risk, Time Risk
+    - 8 qubits representing comprehensive business risk factors:
+      [0] Modal Risk
+      [1] Sector Risk
+      [2] Location Risk
+      [3] Time Risk
+      [4] Market Risk (target_market)
+      [5] Competition Risk
+      [6] Team Risk
+      [7] Business Model Risk
     - Rotation angles based on extracted variables
-    - Entanglement to model risk correlations
+    - Multi-layer entanglement to model complex risk correlations
     """
-    n_qubits = 4
+    n_qubits = 8
     shots = 1024
     
     # Create quantum circuit
     qc = QuantumCircuit(n_qubits, n_qubits)
     
-    # Calculate rotation angles based on business variables
+    # ========== CALCULATE ROTATION ANGLES ==========
     theta_modal = calculate_modal_angle(variables.modal)
     theta_sektor = calculate_sektor_angle(variables.sektor)
     theta_lokasi = calculate_lokasi_angle(variables.lokasi)
     theta_tahun = calculate_tahun_angle(variables.tahun)
+    theta_market = calculate_market_angle(variables.target_market)
+    theta_competition = calculate_competition_angle(variables.competitors)
+    theta_team = calculate_team_angle(variables.team_size)
+    theta_model = calculate_business_model_angle(variables.business_model)
     
-    # Apply Hadamard gates for superposition
+    # ========== LAYER 1: SUPERPOSITION ==========
     for i in range(n_qubits):
         qc.h(i)
     
-    # Apply rotation gates based on risk factors
-    qc.ry(theta_modal, 0)   # Modal risk
-    qc.ry(theta_sektor, 1)  # Sector risk
-    qc.ry(theta_lokasi, 2)  # Location risk
-    qc.ry(theta_tahun, 3)   # Time risk
+    # ========== LAYER 2: PARAMETER ENCODING ==========
+    qc.ry(theta_modal, 0)        # Modal risk
+    qc.ry(theta_sektor, 1)       # Sector risk
+    qc.ry(theta_lokasi, 2)       # Location risk
+    qc.ry(theta_tahun, 3)        # Time risk
+    qc.ry(theta_market, 4)       # Market risk
+    qc.ry(theta_competition, 5)  # Competition risk
+    qc.ry(theta_team, 6)         # Team risk
+    qc.ry(theta_model, 7)        # Business model risk
     
-    # Add entanglement (risk correlation)
-    qc.cx(0, 1)  # Modal affects sector risk
-    qc.cx(1, 2)  # Sector affects location risk
-    qc.cx(2, 3)  # Location affects time risk
+    # ========== LAYER 3: ENTANGLEMENT (Risk Correlations) ==========
+    # Core business factors (0-3)
+    qc.cx(0, 1)  # Modal affects sector viability
+    qc.cx(1, 2)  # Sector affects location choice
+    qc.cx(2, 3)  # Location affects time/regulatory
     
-    # Additional rotation for fine-tuning
-    qc.rz(np.pi/4, 0)
-    qc.rz(np.pi/6, 1)
+    # Market & Competition layer (4-5)
+    qc.cx(1, 4)  # Sector constrains target market
+    qc.cx(4, 5)  # Market size affects competition intensity
     
-    # Measure all qubits
+    # Execution layer (6-7)
+    qc.cx(0, 6)  # Capital affects team size
+    qc.cx(6, 7)  # Team capability affects business model execution
+    
+    # Cross-layer correlations
+    qc.cx(5, 7)  # Competition affects model defensibility
+    qc.cx(3, 4)  # Timing affects market readiness
+    
+    # ========== LAYER 4: PHASE CORRECTION ==========
+    # Add RZ gates for fine-tuning based on risk categories
+    qc.rz(np.pi/4, 0)   # Modal phase
+    qc.rz(np.pi/6, 1)   # Sector phase
+    qc.rz(np.pi/8, 4)   # Market phase
+    qc.rz(np.pi/5, 5)   # Competition phase
+    
+    # ========== LAYER 5: MEASUREMENT ==========
     qc.measure(range(n_qubits), range(n_qubits))
     
-    # Run simulation
+    # ========== RUN SIMULATION ==========
     simulator = AerSimulator()
     job = simulator.run(qc, shots=shots)
     result = job.result()
     counts = result.get_counts(qc)
     
-    # Calculate success probability
-    # Success = states with more 0s than 1s (lower risk)
+    # ========== CALCULATE SUCCESS PROBABILITY ==========
+    # Enhanced success criterion: weighted by qubit importance
+    # Core qubits (0-3) weight = 2x, Extended qubits (4-7) weight = 1x
     success_count = 0
     for state, count in counts.items():
-        if state.count('0') >= state.count('1'):
+        core_zeros = state[4:].count('0')  # First 4 qubits (right side in Qiskit)
+        ext_zeros = state[:4].count('0')   # Last 4 qubits
+        
+        # Weighted success: need majority 0s in core + decent ext
+        if (core_zeros >= 3) or (core_zeros >= 2 and ext_zeros >= 2):
             success_count += count
     
     success_probability = success_count / shots
     
-    # Generate probability distribution for heatmap
-    prob_distribution = _counts_to_distribution(counts, shots)
+    # ========== GENERATE DISTRIBUTION ==========
+    prob_distribution = _counts_to_distribution_8q(counts, shots)
     
     return {
         "success_probability": success_probability,
@@ -107,7 +144,11 @@ def _run_qiskit_simulation(variables: ExtractedVariables) -> Dict[str, Any]:
                 "modal": round(theta_modal, 4),
                 "sektor": round(theta_sektor, 4),
                 "lokasi": round(theta_lokasi, 4),
-                "tahun": round(theta_tahun, 4)
+                "tahun": round(theta_tahun, 4),
+                "target_market": round(theta_market, 4),
+                "competitors": round(theta_competition, 4),
+                "team_size": round(theta_team, 4),
+                "business_model": round(theta_model, 4)
             }
         }
     }
@@ -210,12 +251,130 @@ def calculate_tahun_angle(tahun: int) -> float:
         return 0.5 * np.pi
 
 
+def calculate_market_angle(target_market: str) -> float:
+    """Convert target market to rotation angle based on TAM (Total Addressable Market)"""
+    if not target_market or target_market == "Tidak disebutkan" or target_market is None:
+        return 0.5 * np.pi  # Default: moderate risk
+    
+    market_lower = str(target_market).lower()
+    
+    # B2B Enterprise = lower risk (predictable revenue)
+    if any(keyword in market_lower for keyword in ["enterprise", "b2b", "korporat", "bumn"]):
+        return 0.3 * np.pi
+    # Mass Market B2C = moderate-high risk (need scale)
+    elif any(keyword in market_lower for keyword in ["b2c", "konsumen", "umkm", "retail"]):
+        return 0.55 * np.pi
+    # Niche/Specialized = moderate risk
+    elif any(keyword in market_lower for keyword in ["niche", "spesialis", "premium"]):
+        return 0.4 * np.pi
+    # Default
+    else:
+        return 0.5 * np.pi
+
+
+def calculate_competition_angle(competitors: str) -> float:
+    """Convert competitor info to rotation angle based on competitive intensity"""
+    if not competitors or competitors == "Tidak disebutkan" or competitors is None:
+        return 0.5 * np.pi  # Default: moderate
+    
+    comp_lower = str(competitors).lower()
+    
+    # Count indicators of high competition
+    high_comp_keywords = ["gojek", "grab", "tokopedia", "shopee", "bukalapak", "unicorn", 
+                          "banyak", "ramai", "ketat", "saturated", "crowded"]
+    low_comp_keywords = ["belum ada", "sedikit", "pioneer", "first mover", "blue ocean", "monopoli"]
+    
+    high_count = sum(1 for kw in high_comp_keywords if kw in comp_lower)
+    low_count = sum(1 for kw in low_comp_keywords if kw in comp_lower)
+    
+    # High competition = higher angle (more risk)
+    if high_count > low_count:
+        return 0.65 * np.pi
+    # Low competition = lower angle (less risk)
+    elif low_count > high_count:
+        return 0.25 * np.pi
+    # Moderate
+    else:
+        return 0.45 * np.pi
+
+
+def calculate_team_angle(team_size: str) -> float:
+    """Convert team size to rotation angle based on execution capability"""
+    if not team_size or team_size == "Tidak disebutkan" or team_size is None:
+        return 0.5 * np.pi  # Default
+    
+    team_lower = str(team_size).lower()
+    
+    # Try to extract number
+    import re
+    numbers = re.findall(r'\d+', team_lower)
+    
+    if numbers:
+        size = int(numbers[0])
+        # Optimal team: 20-100 people (lower risk)
+        if 20 <= size <= 100:
+            return 0.3 * np.pi
+        # Small team <20 (higher execution risk)
+        elif size < 20:
+            return 0.55 * np.pi
+        # Large team >100 (coordination risk)
+        else:
+            return 0.45 * np.pi
+    
+    # Keyword-based fallback
+    if any(kw in team_lower for kw in ["besar", "puluhan", "ratusan"]):
+        return 0.4 * np.pi
+    elif any(kw in team_lower for kw in ["kecil", "startup", "lean"]):
+        return 0.55 * np.pi
+    else:
+        return 0.5 * np.pi
+
+
+def calculate_business_model_angle(business_model: str) -> float:
+    """Convert business model to rotation angle based on scalability & defensibility"""
+    if not business_model or business_model == "Tidak disebutkan" or business_model is None:
+        return 0.5 * np.pi  # Default
+    
+    model_lower = str(business_model).lower()
+    
+    # SaaS/Platform = lowest risk (scalable, recurring revenue)
+    if any(kw in model_lower for kw in ["saas", "platform", "marketplace", "subscription"]):
+        return 0.25 * np.pi
+    # Transactional/Commission = moderate risk
+    elif any(kw in model_lower for kw in ["commission", "komisi", "transaction fee", "take rate"]):
+        return 0.4 * np.pi
+    # Traditional/Asset-heavy = higher risk
+    elif any(kw in model_lower for kw in ["asset", "inventory", "offline", "traditional"]):
+        return 0.6 * np.pi
+    # Freemium/Ad-based = moderate-high risk (monetization challenge)
+    elif any(kw in model_lower for kw in ["freemium", "iklan", "ads", "advertising"]):
+        return 0.55 * np.pi
+    # Default
+    else:
+        return 0.5 * np.pi
+
+
 def _counts_to_distribution(counts: Dict[str, int], shots: int) -> list:
-    """Convert measurement counts to probability distribution"""
+    """Convert measurement counts to probability distribution (4-qubit legacy)"""
     # Create 16 bins for 4-qubit states
     distribution = []
     for i in range(16):
         state = format(i, '04b')
         prob = counts.get(state, 0) / shots
         distribution.append(prob)
+    return distribution
+
+
+def _counts_to_distribution_8q(counts: Dict[str, int], shots: int) -> list:
+    """Convert measurement counts to probability distribution (8-qubit)"""
+    # For 8 qubits, we have 256 possible states
+    # Aggregate into 16 bins for visualization (group by first 4 qubits)
+    distribution = [0.0] * 16
+    
+    for state, count in counts.items():
+        # Take first 4 bits (representing core business factors)
+        bin_index = int(state[4:], 2) if len(state) >= 8 else int(state, 2)
+        bin_index = min(bin_index, 15)  # Safety clamp
+        distribution[bin_index] += count / shots
+    
     return distribution

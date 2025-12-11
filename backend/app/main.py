@@ -1,9 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import analyze
+from app.config import get_settings
+
+settings = get_settings()
 
 app = FastAPI(
-    title="Q-RISQ API",
+    title=settings.app_name,
     description="Hybrid Quantum-AI Decision Support System for Risk Analysis",
     version="1.0.0-MVP",
     docs_url="/docs",
@@ -13,11 +16,12 @@ app = FastAPI(
 # CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Untuk development, production harus lebih strict
+    allow_origins=settings.cors_origins_list if settings.is_production else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Include routers
 app.include_router(analyze.router, prefix="/api", tags=["Analysis"])
