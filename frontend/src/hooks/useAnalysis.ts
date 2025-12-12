@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { analyzeRisk, AnalyzeResponse, AnalyzeRequest } from '@/lib/api';
+import { analyzeRisk, AnalyzeResponse, ModelProvider } from '@/lib/api';
 
 export function useAnalysis() {
     const [result, setResult] = useState<AnalyzeResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [modelProvider, setModelProvider] = useState<ModelProvider>('groq');
 
     const submitAnalysis = async (description: string) => {
         setLoading(true);
@@ -16,7 +17,7 @@ export function useAnalysis() {
                 throw new Error("Deskripsi terlalu pendek. Minimal 50 karakter untuk analisis akurat.");
             }
 
-            const data = await analyzeRisk({ description });
+            const data = await analyzeRisk({ description, model_provider: modelProvider });
             setResult(data);
         } catch (err) {
             if (err instanceof Error) {
@@ -34,5 +35,6 @@ export function useAnalysis() {
         setError(null);
     };
 
-    return { result, loading, error, submitAnalysis, resetAnalysis };
+    return { result, loading, error, submitAnalysis, resetAnalysis, modelProvider, setModelProvider };
 }
+

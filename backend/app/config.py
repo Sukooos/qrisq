@@ -26,10 +26,17 @@ class Settings(BaseSettings):
     quantum_shots: int = 1024
     use_mock_simulator: bool = False
     
+    # LLM Provider Selection
+    llm_provider: str = "groq"  # "groq" | "gemini"
+    use_llm_extraction: bool = True  # Set to False to use regex fallback
+    
     # Groq LLM
     groq_api_key: str | None = None
     groq_model: str = "llama-3.3-70b-versatile"
-    use_llm_extraction: bool = True  # Set to False to use regex fallback
+    
+    # Google Gemini LLM
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-2.0-flash"  # Fast, reliable JSON output
     
     # Optional: OpenAI (legacy)
     openai_api_key: str | None = None

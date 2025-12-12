@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Literal
 
 
 class AnalyzeRequest(BaseModel):
@@ -9,6 +9,10 @@ class AnalyzeRequest(BaseModel):
         min_length=50,
         description="Deskripsi skenario bisnis minimal 50 karakter",
         examples=["Investasi 500 juta di F&B Jakarta Selatan tahun 2026"]
+    )
+    model_provider: Literal["groq", "gemini"] = Field(
+        default="groq",
+        description="LLM provider to use: 'groq' (Llama) or 'gemini' (Google)"
     )
 
 

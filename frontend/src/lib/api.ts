@@ -8,8 +8,11 @@ export const api = axios.create({
     },
 });
 
+export type ModelProvider = 'groq' | 'gemini';
+
 export interface AnalyzeRequest {
     description: string;
+    model_provider?: ModelProvider;
 }
 
 export interface QuantumSummary {

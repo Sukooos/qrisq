@@ -8,3 +8,5 @@ numpy>=1.24.0,<2.0.0
 python-dotenv==1.0.0
 httpx
 groq>=0.4.0
+google-generativeai>=0.8.0
+

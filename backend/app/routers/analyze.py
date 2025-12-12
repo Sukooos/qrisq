@@ -27,7 +27,7 @@ async def analyze_risk(request: AnalyzeRequest):
         print(f"[ANALYZE] Input: {request.description[:80]}...")
         
         # ===== STEP 1: Extract variables from description (LLM) =====
-        variables = extract_variables(request.description)
+        variables = extract_variables(request.description, provider=request.model_provider)
         print(f"[ANALYZE] Step 1 DONE: sektor={variables.sektor}, modal={variables.modal:,.0f}")
         
         # ===== STEP 2: Run quantum simulation (Qiskit) =====
@@ -41,7 +41,7 @@ async def analyze_risk(request: AnalyzeRequest):
         
         # ===== STEP 4: LLM Summarize quantum results (NEW!) =====
         quantum_summary = None
-        if settings.use_llm_extraction and settings.groq_api_key:
+        if settings.use_llm_extraction and (settings.groq_api_key or settings.gemini_api_key):
             # Convert variables to dict for LLM
             var_dict = {
                 "modal": variables.modal,
@@ -60,7 +60,7 @@ async def analyze_risk(request: AnalyzeRequest):
                 "Low": analysis["risk_categories"].Low
             }
             
-            summary_data = summarize_quantum_results(var_dict, quantum_result, risk_dict)
+            summary_data = summarize_quantum_results(var_dict, quantum_result, risk_dict, provider=request.model_provider)
             
             if summary_data:
                 # Helper to safely convert any value to string

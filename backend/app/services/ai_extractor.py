@@ -10,15 +10,18 @@ from app.config import get_settings
 from app.services.llm_client import extract_with_llm
 
 
-def extract_variables(description: str) -> ExtractedVariables:
+def extract_variables(description: str, provider: str = None) -> ExtractedVariables:
     """
     Extract business variables using LLM with regex fallback.
+    Args:
+        description: Business scenario text
+        provider: Override provider ("groq" or "gemini"). If None, uses config.
     """
     settings = get_settings()
     
     # Try LLM extraction first if enabled
-    if settings.use_llm_extraction and settings.groq_api_key:
-        llm_result = extract_with_llm(description)
+    if settings.use_llm_extraction and (settings.groq_api_key or settings.gemini_api_key):
+        llm_result = extract_with_llm(description, provider=provider)
         
         if llm_result:
             # Helper to safely convert list to string (LLM sometimes returns lists)

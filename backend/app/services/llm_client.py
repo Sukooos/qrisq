@@ -1,12 +1,27 @@
 """
-Groq LLM Client for Variable Extraction & Quantum Summary
+Multi-Provider LLM Client for Variable Extraction & Quantum Summary
+Supports: Groq (Llama), Google Gemini
 Enhanced version with sequential flow: Extract → Qiskit → Summarize
 """
 
 import json
 from typing import Optional, Dict, Any, List
-from groq import Groq
 from app.config import get_settings
+
+# Provider imports - lazy loaded to avoid errors if not installed
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+    Groq = None
+
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    genai = None
 
 # ============== EXTRACTION PROMPT ==============
 EXTRACTION_PROMPT = """Kamu adalah asisten AI senior yang ahli dalam menganalisis proposal dan deskripsi bisnis Indonesia.
@@ -135,21 +150,41 @@ MISI: Berikan analisis risiko bisnis ULTRA-MENDALAM berdasarkan simulasi quantum
 """
 
 
-def extract_with_llm(description: str) -> Optional[Dict[str, Any]]:
+def extract_with_llm(description: str, provider: str = None) -> Optional[Dict[str, Any]]:
     """
-    Extract business variables using Groq SDK - Enhanced version
+    Extract business variables using LLM - Multi-provider version
+    Supports: Groq (default), Gemini
+    Args:
+        description: Business scenario text
+        provider: Override provider ("groq" or "gemini"). If None, uses config.
     Returns dict with all extracted fields or None if failed
     """
     settings = get_settings()
+    # Use provided provider or fall back to config
+    selected_provider = (provider or settings.llm_provider).lower()
     
-    print(f"[LLM-EXTRACT] Checking API key: {'SET' if settings.groq_api_key else 'NOT SET'}")
+    print(f"[LLM-EXTRACT] Provider: {selected_provider.upper()}")
+    
+    if selected_provider == "gemini":
+        return _extract_with_gemini(description)
+    else:  # Default to Groq
+        return _extract_with_groq(description)
+
+
+def _extract_with_groq(description: str) -> Optional[Dict[str, Any]]:
+    """Extract using Groq API"""
+    settings = get_settings()
+    
+    if not GROQ_AVAILABLE:
+        print("[LLM-EXTRACT] ERROR: Groq SDK not installed")
+        return None
     
     if not settings.groq_api_key:
-        print("[LLM-EXTRACT] WARNING: GROQ_API_KEY not set, falling back to regex")
+        print("[LLM-EXTRACT] WARNING: GROQ_API_KEY not set")
         return None
     
     try:
-        print(f"[LLM-EXTRACT] Calling Groq API: {description[:50]}...")
+        print(f"[LLM-EXTRACT] Calling Groq ({settings.groq_model}): {description[:50]}...")
         client = Groq(api_key=settings.groq_api_key)
         
         completion = client.chat.completions.create(
@@ -181,53 +216,112 @@ def extract_with_llm(description: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def summarize_quantum_results(
-    variables: Dict[str, Any],
-    quantum_result: Dict[str, Any],
-    risk_categories: Dict[str, List[str]]
-) -> Optional[Dict[str, Any]]:
-    """
-    Generate LLM summary of quantum simulation results.
-    This is called AFTER Qiskit simulation to explain the results.
-    """
+def _extract_with_gemini(description: str) -> Optional[Dict[str, Any]]:
+    """Extract using Google Gemini API"""
     settings = get_settings()
     
-    if not settings.groq_api_key:
+    if not GEMINI_AVAILABLE:
+        print("[LLM-EXTRACT] ERROR: Google Generative AI SDK not installed. Run: pip install google-generativeai")
+        return None
+    
+    if not settings.gemini_api_key:
+        print("[LLM-EXTRACT] WARNING: GEMINI_API_KEY not set")
         return None
     
     try:
-        print(f"[LLM-SUMMARY] Generating quantum summary...")
-        client = Groq(api_key=settings.groq_api_key)
+        # Force use gemini-2.0-flash (2.5-flash thinking model truncates JSON)
+        model_name = "gemini-2.5-flash-lite"
+        print(f"[LLM-EXTRACT] Calling Gemini ({model_name}): {description[:50]}...")
         
-        # Get metadata from quantum result
-        metadata = quantum_result.get("metadata", {})
-        rotation_angles = metadata.get("rotation_angles", {})
-        
-        # Format the prompt with all data
-        prompt = QUANTUM_SUMMARY_PROMPT.format(
-            sektor=variables.get('sektor', 'Unknown'),
-            lokasi=variables.get('lokasi', 'Indonesia'),
-            modal=variables.get('modal', 0),
-            tahun=variables.get('tahun', 2025),
-            target_market=variables.get('target_market', 'Tidak disebutkan'),
-            competitors=variables.get('competitors', 'Tidak disebutkan'),
-            unique_value=variables.get('unique_value', 'Tidak disebutkan'),
-            success_probability=quantum_result.get('success_probability', 0),
-            shots=metadata.get('shots', 1024),
-            circuit_depth=metadata.get('circuit_depth', 'N/A'),
-            n_qubits=metadata.get('n_qubits', 8),
-            theta_modal=rotation_angles.get('modal', 0),
-            theta_sektor=rotation_angles.get('sektor', 0),
-            theta_lokasi=rotation_angles.get('lokasi', 0),
-            theta_tahun=rotation_angles.get('tahun', 0),
-            theta_market=rotation_angles.get('target_market', 0),
-            theta_competition=rotation_angles.get('competitors', 0),
-            theta_team=rotation_angles.get('team_size', 0),
-            theta_model=rotation_angles.get('business_model', 0),
-            high_risks=', '.join(risk_categories.get('High', [])) or 'None',
-            medium_risks=', '.join(risk_categories.get('Medium', [])) or 'None',
-            low_risks=', '.join(risk_categories.get('Low', [])) or 'None'
+        genai.configure(api_key=settings.gemini_api_key)
+        model = genai.GenerativeModel(
+            model_name=model_name,
+            generation_config={
+                "temperature": 0.1,
+                "max_output_tokens": 1024,
+                "response_mime_type": "application/json"
+            }
         )
+        
+        prompt = f"""Kamu adalah asisten ekstraksi data bisnis profesional. Selalu jawab dalam format JSON valid.
+
+{EXTRACTION_PROMPT}{description}"""
+        
+        response = model.generate_content(prompt)
+        content = response.text
+        print(f"[LLM-EXTRACT] Raw response: {content[:150]}...")
+        
+        extracted = json.loads(content)
+        print(f"[LLM-EXTRACT] SUCCESS: sektor={extracted.get('sektor')}, modal={extracted.get('modal')}")
+        return extracted
+        
+    except Exception as e:
+        print(f"[LLM-EXTRACT] ERROR: {e}")
+        return None
+
+
+def summarize_quantum_results(
+    variables: Dict[str, Any],
+    quantum_result: Dict[str, Any],
+    risk_categories: Dict[str, List[str]],
+    provider: str = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Generate LLM summary of quantum simulation results.
+    Multi-provider version. This is called AFTER Qiskit simulation.
+    Args:
+        provider: Override provider ("groq" or "gemini"). If None, uses config.
+    """
+    settings = get_settings()
+    selected_provider = (provider or settings.llm_provider).lower()
+    
+    print(f"[LLM-SUMMARY] Provider: {selected_provider.upper()}")
+    
+    # Build the formatted prompt first
+    metadata = quantum_result.get("metadata", {})
+    rotation_angles = metadata.get("rotation_angles", {})
+    
+    prompt = QUANTUM_SUMMARY_PROMPT.format(
+        sektor=variables.get('sektor', 'Unknown'),
+        lokasi=variables.get('lokasi', 'Indonesia'),
+        modal=variables.get('modal', 0),
+        tahun=variables.get('tahun', 2025),
+        target_market=variables.get('target_market', 'Tidak disebutkan'),
+        competitors=variables.get('competitors', 'Tidak disebutkan'),
+        unique_value=variables.get('unique_value', 'Tidak disebutkan'),
+        success_probability=quantum_result.get('success_probability', 0),
+        shots=metadata.get('shots', 1024),
+        circuit_depth=metadata.get('circuit_depth', 'N/A'),
+        n_qubits=metadata.get('n_qubits', 8),
+        theta_modal=rotation_angles.get('modal', 0),
+        theta_sektor=rotation_angles.get('sektor', 0),
+        theta_lokasi=rotation_angles.get('lokasi', 0),
+        theta_tahun=rotation_angles.get('tahun', 0),
+        theta_market=rotation_angles.get('target_market', 0),
+        theta_competition=rotation_angles.get('competitors', 0),
+        theta_team=rotation_angles.get('team_size', 0),
+        theta_model=rotation_angles.get('business_model', 0),
+        high_risks=', '.join(risk_categories.get('High', [])) or 'None',
+        medium_risks=', '.join(risk_categories.get('Medium', [])) or 'None',
+        low_risks=', '.join(risk_categories.get('Low', [])) or 'None'
+    )
+    
+    if selected_provider == "gemini":
+        return _summarize_with_gemini(prompt)
+    else:
+        return _summarize_with_groq(prompt)
+
+
+def _summarize_with_groq(prompt: str) -> Optional[Dict[str, Any]]:
+    """Summarize using Groq API"""
+    settings = get_settings()
+    
+    if not GROQ_AVAILABLE or not settings.groq_api_key:
+        return None
+    
+    try:
+        print(f"[LLM-SUMMARY] Calling Groq ({settings.groq_model})...")
+        client = Groq(api_key=settings.groq_api_key)
         
         completion = client.chat.completions.create(
             model=settings.groq_model,
@@ -247,14 +341,54 @@ def summarize_quantum_results(
         )
         
         content = completion.choices[0].message.content
-        print(f"[LLM-SUMMARY] Raw response (FULL): {content}")
+        print(f"[LLM-SUMMARY] Raw response: {content[:200]}...")
         
         summary = json.loads(content)
         print(f"[LLM-SUMMARY] Parsed fields: {list(summary.keys())}")
-        print(f"[LLM-SUMMARY] key_insight present: {bool(summary.get('key_insight'))}")
         print(f"[LLM-SUMMARY] SUCCESS!")
         return summary
         
     except Exception as e:
         print(f"[LLM-SUMMARY] ERROR: {e}")
         return None
+
+
+def _summarize_with_gemini(prompt: str) -> Optional[Dict[str, Any]]:
+    """Summarize using Google Gemini API"""
+    settings = get_settings()
+    
+    if not GEMINI_AVAILABLE or not settings.gemini_api_key:
+        print("[LLM-SUMMARY] ERROR: Gemini not available or API key not set")
+        return None
+    
+    try:
+        # Force use gemini-2.0-flash (2.5-flash thinking model truncates JSON)
+        model_name = "gemini-2.5-flash-lite"
+        print(f"[LLM-SUMMARY] Calling Gemini ({model_name})...")
+        
+        genai.configure(api_key=settings.gemini_api_key)
+        model = genai.GenerativeModel(
+            model_name=model_name,
+            generation_config={
+                "temperature": 0.3,
+                "max_output_tokens": 4096,
+                "response_mime_type": "application/json"
+            },
+            system_instruction="Kamu adalah Dr. Amelia Chen, Quantum Risk Analyst expert. WAJIB generate JSON dengan 5 field: executive_summary, probability_explanation, risk_breakdown, key_insight, action_items. TIDAK BOLEH skip field apapun. Gunakan bahasa Indonesia profesional."
+        )
+        
+        response = model.generate_content(prompt)
+        content = response.text
+        print(f"[LLM-SUMMARY] Raw response length: {len(content)} chars")
+        print(f"[LLM-SUMMARY] Raw response (first 500): {content[:500]}...")
+        print(f"[LLM-SUMMARY] Raw response (last 200): ...{content[-200:]}")
+        
+        summary = json.loads(content)
+        print(f"[LLM-SUMMARY] Parsed fields: {list(summary.keys())}")
+        print(f"[LLM-SUMMARY] SUCCESS!")
+        return summary
+        
+    except Exception as e:
+        print(f"[LLM-SUMMARY] ERROR: {e}")
+        return None
+

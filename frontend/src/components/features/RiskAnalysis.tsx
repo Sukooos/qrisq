@@ -9,10 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { ProbabilityGauge } from './ProbabilityGauge';
 import { RiskHeatmap } from './RiskHeatmap';
 import { QuantumInsights } from './QuantumInsights';
+import { ModelSelector } from '@/components/ui/ModelSelector';
 import { Loader2, RefreshCw, Send, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 export default function RiskAnalysis() {
-    const { result, loading, error, submitAnalysis, resetAnalysis } = useAnalysis();
+    const { result, loading, error, submitAnalysis, resetAnalysis, modelProvider, setModelProvider } = useAnalysis();
     const [input, setInput] = useState("");
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -78,6 +79,12 @@ export default function RiskAnalysis() {
                                         {loading ? "QUANTUM PROCESSING..." : "ANALYZE RISK"}
                                         {!loading && <Send className="ml-2 w-5 h-5" />}
                                     </Button>
+
+                                    {/* Model Selector */}
+                                    <div className="flex items-center justify-between pt-2 border-t border-gray-800">
+                                        <span className="text-sm text-gray-500">AI Engine</span>
+                                        <ModelSelector value={modelProvider} onChange={setModelProvider} />
+                                    </div>
                                 </form>
                             </CardContent>
                         </Card>
